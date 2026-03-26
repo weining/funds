@@ -590,7 +590,6 @@ export default {
       containerWidth: 790,
       containerHeight: 590,
       detailShadow: false,
-      changelogShadow: false,
       sltFund: {},
       sltIndCode: "",
       localVersion: version,
@@ -664,9 +663,7 @@ export default {
       if (this.darkMode) {
         className += "darkMode ";
       }
-      if (this.changelogShadow) {
-        className += "changelog-container";
-      } else if (this.detailShadow) {
+      if (this.detailShadow) {
         className += "detail-container";
       } else if (this.isEdit) {
         className += "more-width";
@@ -830,11 +827,6 @@ export default {
           this.getIndFundData();
           this.getData();
           this.checkInterval(true);
-
-          let ver = res.version ? res.version : "1.0.0";
-          if (ver != this.localVersion) {
-            this.changelog();
-          }
         }
       );
     },
@@ -920,11 +912,9 @@ export default {
       chrome.tabs.create({ url: "/options/options.html" });
     },
     changelog() {
-      this.changelogShadow = true;
       this.$refs.changelog.init();
     },
     closeChangelog() {
-      this.changelogShadow = false;
       chrome.storage.sync.set({
         version: this.localVersion,
       });

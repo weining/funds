@@ -11,44 +11,18 @@
     width="460px"
     center
   >
-    <div v-if="netError" class="btn-row">
-      网络不好？
-      <el-button type="primary" @click="goGitee">去官网查看</el-button>
-    </div>
     <div
       class="content"
-      v-show="!netError"
       v-loading="loading"
       :element-loading-background="
         darkMode ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.9)'
       "
     >
-      <p>qq交流群：{{ changelog.qqGroup }}</p>
-      <p>
-        电报交流群：<a target="_Blank" :href="changelog.tgGroup">点击跳转</a>
-      </p>
-      <div class="qrcode-row">
-        <div class="qrcode-list">
-          <p>微信群二维码</p>
-          <div ref="qrcode" id="qrcode"></div>
-        </div>
-        <div class="qrcode-list">
-          <p>小程序二维码</p>
-          <div class="mpcode">
-            <img :src="'./../icons/qrcode/mp.jpg'" />
-          </div>
-        </div>
-      </div>
-
-      <p v-if="changelog.tip">{{ changelog.tip }}</p>
-      <div v-if="changelog.htmlTip" v-html="changelog.htmlTip"></div>
       <ul>
         <li v-for="el in changelog.list" :key="el.version">
           <h5>
             v{{ el.version }}
-            <span class="btn red" v-if="localVersion == el.version"
-              >当前版本</span
-            >
+            <span class="btn red" v-if="localVersion == el.version">当前版本</span>
             <span class="btn primary" v-if="el.type == 2">重要更新</span>
           </h5>
           <ul>
@@ -73,7 +47,6 @@
 <script>
 var json = require("./changeLog.json");
 const { version } = require("../../package.json");
-import QRCode from "qrcodejs2";
 export default {
   props: {
     top: {
@@ -87,58 +60,34 @@ export default {
   },
   data() {
     return {
-      updateurl: {
-        github: "https://x2rr.github.io/funds/src/common/changeLog.json",
-        gitee: "https://rabt.gitee.io/funds/src/common/changeLog.json",
-      },
+      updateurl: "https://x2rr.github.io/funds/src/common/changeLog.json",
       centerDialogVisible: false,
-      qrcode: false,
       changelog: {},
       loading: true,
-      netError: false,
       localVersion: version,
     };
   },
   mounted() {},
   methods: {
-    goGitee() {
-      window.open("http://rabt.gitee.io/funds/docs/dist/index.html#/ChangeLog");
-    },
     getChangelog() {
       this.loading = true;
       this.$axios
-        .get(this.updateurl.github)
+        .get(this.updateurl)
         .then((res) => {
-          this.netError = false;
           this.loading = false;
-          this.qrlink = res.data.qrcode;
           this.changelog = res.data;
-          this.setQrcode();
         })
-        .catch((error) => {
-          this.netError = true;
+        .catch(() => {
+          this.loading = false;
+          this.changelog = json;
         });
     },
     init() {
       this.centerDialogVisible = true;
       this.getChangelog();
     },
-    setQrcode() {
-      let that = this;
-      this.qrcode = new QRCode("qrcode", {
-        width: 160,
-        height: 160, // 高度
-        text: this.changelog.qrcode, // 二维码内容
-      });
-    },
-
     close() {
-      if (this.qrcode) {
-        this.qrcode.clear();
-      }
-      this.$refs.qrcode.innerHTML = null;
       this.centerDialogVisible = false;
-
       this.$emit("close", false);
     },
   },

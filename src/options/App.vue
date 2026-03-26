@@ -243,7 +243,6 @@ export default {
       showBadge: 1,
       BadgeContent: 1,
       BadgeType: 1,
-      changelogShadow: false,
       normalFontSize: false,
       loadingFundList: false,
       version,
@@ -354,11 +353,9 @@ export default {
     },
 
     changelog() {
-      this.changelogShadow = true;
       this.$refs.changelog.init();
     },
     closeChangelog() {
-      this.changelogShadow = false;
     },
     changeOption(val, type, sendMessage) {
       chrome.storage.sync.set(
