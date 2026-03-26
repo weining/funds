@@ -171,18 +171,9 @@
           </p>
         </li>
         <li>
-          <div class="list-title">请作者喝杯咖啡</div>
+          <div class="list-title">源代码</div>
           <p style="line-height:34px">
-            开源不易，本插件是一个完全开源的项目，也衍生出许多同类产品，您的支持是对作者最大的鼓励。如果你觉得此插件对你有所帮助，或者想要支持一下我<input
-              class="btn primary"
-              type="button"
-              title="φ(>ω<*)"
-              value="点击打赏"
-              @click="reward"
-            />
-          </p>
-          <p style="line-height:34px">
-            或者你也可以帮忙点一个star，点击查看源码→
+            本项目为开源魔改版，欢迎 Star 或提 Issue。
             <span
               title="点击查看项目源码"
               class="black icon-btn-row"
@@ -203,59 +194,9 @@
               <input
                 class="btn black githubText"
                 type="button"
-                value="源代码"
+                value="github.com/weining/funds"
               />
             </span>
-          </p>
-          <reward :top="50" ref="reward"></reward>
-        </li>
-        <li>
-          <div class="list-title">
-            节假日信息
-            <button
-              :disabled="disabled"
-              @click="getHoliday"
-              title="点击更新节假日信息"
-              class="btn"
-            >
-              更新
-            </button>
-            <span class="loading" v-if="disabled">更新中。。。</span>
-          </div>
-          <p>
-            <span v-if="holiday">
-              当前节假日版本：v{{
-                holiday.version
-              }}&nbsp;&nbsp;&nbsp;&nbsp;最后节假日日期：{{ holiday.lastDate }}
-            </span>
-          </p>
-          <p>
-            tips：更新节假日信息，可以在节假日暂停更新估值，节假日信息会不定时更新。
-            <a href="#" @click="openHoliday">查看最新版</a>
-          </p>
-        </li>
-        <li>
-          <div class="list-title">
-            关于插件
-          </div>
-          <p style="line-height:34px">
-            当前插件版本：v{{ version }}
-            <input
-              class="btn"
-              type="button"
-              value="更新日志"
-              @click="changelog"
-            />
-            <input
-              class="btn"
-              type="button"
-              value="插件主页"
-              @click="openHomePage"
-            />
-          </p>
-          <p style="line-height:34px">
-            电报群：https://t.me/choose_funds_chat
-            <input class="btn" type="button" value="点击跳转" @click="openTG" />
           </p>
           <change-log
             @close="closeChangelog"
@@ -277,14 +218,12 @@
 </template>
 
 <script>
-import reward from "../common/reward";
 import changeLog from "../common/changeLog";
 import configBox from "../common/configBox";
 const { version } = require("../../package.json");
 import { export_json_to_excel } from "../common/js/vendor/Export2Excel";
 export default {
   components: {
-    reward,
     changeLog,
     configBox,
   },
@@ -564,39 +503,11 @@ export default {
     openConfigBox() {
       this.$refs.configBox.init();
     },
-    getHoliday() {
-      this.disabled = true;
-      let url = "https://x2rr.github.io/funds/holiday.json";
-      this.$axios.get(url).then((res) => {
-        chrome.storage.sync.set(
-          {
-            holiday: res.data,
-          },
-          () => {
-            this.holiday = res.data;
-            chrome.runtime.sendMessage({
-              type: "refreshHoliday",
-              data: res.data,
-            });
-            this.disabled = false;
-          }
-        );
-      });
-    },
-    openHoliday() {
-      window.open("https://x2rr.github.io/funds/holiday.json");
+    openGithub() {
+      window.open("https://github.com/weining/funds");
     },
     openGithub() {
-      window.open("https://github.com/x2rr/funds");
-    },
-    openTG() {
-      window.open("https://t.me/choose_funds_chat");
-    },
-    openHomePage() {
-      window.open("http://rabt.gitee.io/funds/docs/dist/index.html");
-    },
-    reward(data) {
-      this.$refs.reward.init();
+      window.open("https://github.com/weining/funds");
     },
     changeDarkMode() {
       chrome.storage.sync.set({
