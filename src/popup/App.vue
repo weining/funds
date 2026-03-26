@@ -407,13 +407,6 @@
       />
       <input class="btn" type="button" value="设置" @click="option" />
       <input class="btn" type="button" value="日志" @click="changelog" />
-      <input
-        class="btn primary"
-        type="button"
-        title="φ(>ω<*)"
-        value="打赏"
-        @click="reward"
-      />
     </div>
     <div class="input-row" v-if="showCost || showGains">
       <input
@@ -478,7 +471,7 @@
       :darkMode="darkMode"
       ref="fundDetail"
     ></fund-detail>
-    <reward @close="rewardShadow = false" ref="reward"></reward>
+
     <change-log
       @close="closeChangelog"
       :darkMode="darkMode"
@@ -490,7 +483,6 @@
 
 <script>
 const { version } = require("../../package.json");
-import reward from "../common/reward";
 import indDetail from "../common/indDetail";
 import fundDetail from "../common/fundDetail";
 import changeLog from "../common/changeLog";
@@ -504,7 +496,6 @@ function debounce(fn, wait = 700) {
 
 export default {
   components: {
-    reward,
     fundDetail,
     indDetail,
     changeLog,
@@ -525,7 +516,6 @@ export default {
       myVar: null,
       myVar1: null,
       rewardShadow: false,
-      checked: "wepay",
       showGains: false,
       showAmount: false,
       showCost: false,
@@ -676,8 +666,6 @@ export default {
       }
       if (this.changelogShadow) {
         className += "changelog-container";
-      } else if (this.rewardShadow) {
-        className += "more-height";
       } else if (this.detailShadow) {
         className += "detail-container";
       } else if (this.isEdit) {
@@ -930,10 +918,6 @@ export default {
 
     option() {
       chrome.tabs.create({ url: "/options/options.html" });
-    },
-    reward() {
-      this.rewardShadow = true;
-      this.$refs.reward.init();
     },
     changelog() {
       this.changelogShadow = true;
