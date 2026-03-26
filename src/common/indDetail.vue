@@ -83,7 +83,7 @@ export default {
     // this.init();
   },
    beforeDestroy() {
-    this.myChart.clear();
+    if (this.myChart) this.myChart.clear();
   },
   methods: {
     formatNum(val) {

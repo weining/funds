@@ -20,7 +20,7 @@ var getGuid = () => {
   });
 }
 var getHoliday = () => {
-  let url = "http://x2rr.github.io/funds/holiday.json";
+  let url = "https://x2rr.github.io/funds/holiday.json";
   return axios.get(url);
 };
 var checkHoliday = date => {
@@ -127,6 +127,61 @@ var formatNum = val => {
   }
 }
 
+var isEtf = (code) => /^(15[09]|51[0-9]|56[1-3]|588)/.test(code);
+var etfSecid = (code) => (/^15/.test(code) ? "0." : "1.") + code;
+
+var fetchFundData = (codes) => {
+  const regular = codes.filter((c) => !isEtf(c));
+  const etf = codes.filter((c) => isEtf(c));
+
+  const regularRequests = regular.map((code) =>
+    axios
+      .get("https://fundgz.1234567.com.cn/js/" + code + ".js")
+      .then((res) => {
+        const match = res.data.match(/\((\{.+\})\)/);
+        if (!match) return null;
+        const d = JSON.parse(match[1]);
+        return {
+          FCODE: d.fundcode,
+          NAV: parseFloat(d.dwjz),
+          GSZ: parseFloat(d.gsz),
+          GSZZL: parseFloat(d.gszzl),
+          GZTIME: d.gztime,
+          PDATE: d.jzrq,
+        };
+      })
+      .catch(() => null)
+  );
+
+  const etfRequest =
+    etf.length > 0
+      ? axios
+          .get(
+            "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f4,f12,f13,f14&secids=" +
+              etf.map(etfSecid).join(",") +
+              "&_=" +
+              new Date().getTime()
+          )
+          .then((res) => {
+            const diff = (res.data.data && res.data.data.diff) || [];
+            return diff.map((item) => ({
+              FCODE: item.f12,
+              NAV: item.f2 - item.f4,
+              GSZ: item.f2,
+              GSZZL: isNaN(item.f3) ? 0 : parseFloat(item.f3),
+              GZTIME: new Date().toTimeString().substr(0, 5),
+              PDATE: new Date().toISOString().substr(0, 10),
+            }));
+          })
+          .catch(() => [])
+      : Promise.resolve([]);
+
+  return Promise.all([Promise.all(regularRequests), etfRequest]).then(
+    ([regularData, etfData]) =>
+      [...regularData.filter((d) => d !== null), ...etfData]
+  );
+};
+
 var setBadge = (fundcode, Realtime, type) => {
   let fundStr = null;
   if (type == 3) {
@@ -152,63 +207,25 @@ var setBadge = (fundcode, Realtime, type) => {
       });
     });
   } else {
-    if (type == 1) {
-      fundStr = fundcode;
-    } else {
-      fundStr = fundListM.map((val) => val.code).join(",");
-    }
+    let codes = type == 1 ? [fundcode] : fundListM.map((val) => val.code);
 
-    let url =
-      "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo?pageIndex=1&pageSize=200&plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=" + userId + "&Fcodes=" +
-      fundStr;
-    axios
-      .get(url)
-      .then((res) => {
+    fetchFundData(codes).then((datas) => {
         let allAmount = 0;
         let allGains = 0;
         let textStr = null;
         let sumNum = 0;
+
         if (type == 1) {
-          let val = res.data.Datas[0];
-          let data = {
-            fundcode: val.FCODE,
-            name: val.SHORTNAME,
-            jzrq: val.PDATE,
-            dwjz: isNaN(val.NAV) ? null : val.NAV,
-            gsz: isNaN(val.GSZ) ? null : val.GSZ,
-            gszzl: isNaN(val.GSZZL) ? 0 : val.GSZZL,
-            gztime: val.GZTIME,
-            num: 0
-          };
-          let slt = fundListM.filter(
-            (item) => item.code == data.fundcode
-          );
-          if (!slt.length) {
-            return false;
-          }
-          data.num = slt[0].num;
-          var sum = 0;
-
-          let num = data.num ? data.num : 0;
-
-          if (val.PDATE != "--" && val.PDATE == val.GZTIME.substr(0, 10)) {
-            data.gsz = val.NAV;
-            data.gszzl = isNaN(val.NAVCHGRT) ? 0 : val.NAVCHGRT;
-            sum = (
-              (data.dwjz - data.dwjz / (1 + data.gszzl * 0.01)) *
-              num
-            ).toFixed(1);
-          } else {
-            if (data.gsz) {
-              sum = ((data.gsz - data.dwjz) * num).toFixed(1);
-            }
-
-          }
-
+          let val = datas[0];
+          if (!val) return;
+          let slt = fundListM.filter((item) => item.code == val.FCODE);
+          if (!slt.length) return;
+          let num = slt[0].num ? slt[0].num : 0;
+          let sum = val.GSZ ? ((val.GSZ - val.NAV) * num).toFixed(1) : 0;
 
           if (BadgeType == 1) {
-            textStr = data.gszzl;
-            sumNum = textStr;
+            textStr = String(val.GSZZL);
+            sumNum = val.GSZZL;
           } else {
             if (num != 0) {
               sumNum = sum;
@@ -218,43 +235,27 @@ var setBadge = (fundcode, Realtime, type) => {
               textStr = "0";
             }
           }
-
         } else {
-          res.data.Datas.forEach((val) => {
-            let slt = fundListM.filter(
-              (item) => item.code == val.FCODE
-            );
-            let num = slt[0].num ? slt[0].num : 0;
-            let NAV = isNaN(val.NAV) ? null : val.NAV;
-            allAmount += NAV * num;
-            var sum = 0;
-            if (val.PDATE != "--" && val.PDATE == val.GZTIME.substr(0, 10)) {
-              let NAVCHGRT = isNaN(val.NAVCHGRT) ? 0 : val.NAVCHGRT;
-              sum = (NAV - NAV / (1 + NAVCHGRT * 0.01)) * num
-            } else {
-              let gsz = isNaN(val.GSZ) ? null : val.GSZ
-              if (gsz && NAV) {
-                sum = (gsz - NAV) * num
-              }
-            }
+          datas.forEach((val) => {
+            let slt = fundListM.filter((item) => item.code == val.FCODE);
+            let num = slt[0] && slt[0].num ? slt[0].num : 0;
+            allAmount += val.NAV * num;
+            let sum = val.GSZ ? (val.GSZ - val.NAV) * num : 0;
             allGains += sum;
-
           });
           if (BadgeType == 1) {
             if (allAmount == 0 || allGains == 0) {
-              sumNum = "0"
-              textStr = "0"
+              sumNum = "0";
+              textStr = "0";
             } else {
               textStr = (100 * allGains / allAmount).toFixed(2);
-              sumNum = textStr
+              sumNum = textStr;
             }
-
           } else {
             sumNum = allGains;
             textStr = formatNum(allGains);
           }
         }
-
 
         chrome.browserAction.setBadgeText({
           text: textStr
@@ -284,7 +285,7 @@ var startInterval = (RealtimeFundcode, type = 1) => {
   let Realtime = isDuringDate();
   RealtimeFundcode = RealtimeFundcode;
   setBadge(RealtimeFundcode, Realtime, type);
-  let time = 2 * 60 * 1000;
+  let time = 30 * 1000;
   if (type == 3) {
     time = 10 * 1000;
   }
@@ -411,25 +412,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     let allGains = 0;
     let sumNum = 0;
     request.data.forEach((val) => {
-      let slt = fundListM.filter(
-        (item) => item.code == val.FCODE
-      );
-      let num = slt[0].num ? slt[0].num : 0;
-      let NAV = isNaN(val.NAV) ? null : val.NAV;
-      allAmount += NAV * num;
-      var sum = 0;
-      if (val.PDATE != "--" && val.PDATE == val.GZTIME.substr(0, 10)) {
-        let NAVCHGRT = isNaN(val.NAVCHGRT) ? 0 : val.NAVCHGRT;
-        sum = (NAV - NAV / (1 + NAVCHGRT * 0.01)) * num
-      } else {
-        let gsz = isNaN(val.GSZ) ? null : val.GSZ;
-        if (gsz != null && NAV != null) {
-          sum = (gsz - NAV) * num;
-        }
-
-      }
+      // popup 发来的字段是 fundcode/dwjz/gsz，兼容大写 FCODE/NAV/GSZ
+      let code = val.fundcode || val.FCODE;
+      let nav = val.dwjz != null ? val.dwjz : val.NAV;
+      let gsz = val.gsz != null ? val.gsz : val.GSZ;
+      let slt = fundListM.filter((item) => item.code == code);
+      let num = slt[0] && slt[0].num ? slt[0].num : 0;
+      allAmount += nav * num;
+      let sum = gsz ? (gsz - nav) * num : 0;
       allGains += sum;
-
     });
     let textStr = null;
     if (BadgeType == 1) {
@@ -482,8 +473,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     let textstr = null;
     let num = 0;
     if (BadgeType == 1) {
-      textstr = request.data.gszzl;
       num = request.data.gszzl;
+      textstr = String(num);
     } else {
       num = request.data.gains;
       textstr = formatNum(request.data.gains);

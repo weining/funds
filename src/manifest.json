@@ -32,6 +32,8 @@
   "permissions": [
     "storage",
     "contextMenus",
-    "https://*.eastmoney.com/*"
+    "https://*.eastmoney.com/*",
+    "https://*.1234567.com.cn/*",
+    "https://j4.dfcfw.com/*"
   ]
 }

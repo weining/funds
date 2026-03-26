@@ -102,7 +102,16 @@ export default {
       try {
         if (typeof JSON.parse(this.inputConfigStr) == "object") {
           let config = JSON.parse(this.inputConfigStr);
-
+          // 兼容商店版 fundListGroup 格式，展开为 fundListM
+          if (config.fundListGroup && !config.fundListM) {
+            config.fundListM = config.fundListGroup.flatMap(
+              (group) => (group.funds || []).map((f) => ({
+                code: f.code || f.fundcode || f.FCODE,
+                num: f.num != null ? f.num : 0,
+                cost: f.cost != null ? f.cost : 0,
+              }))
+            );
+          }
           chrome.storage.sync.set(config, (val) => {
             this.$emit("success", false);
 

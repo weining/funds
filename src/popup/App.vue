@@ -451,6 +451,12 @@
         "
       />
     </div>
+    <div class="input-row total-row" v-if="parseFloat(allAmount) > 0">
+      <span class="total-label">总市值</span>
+      <span class="total-amount">
+        {{ parseFloat(allAmount).toLocaleString('zh', { minimumFractionDigits: 2 }) }} 元
+      </span>
+    </div>
     <div
       class="refresh"
       :class="{ isRefresh: isRefresh }"
@@ -638,6 +644,13 @@ export default {
       allGains = allGains.toFixed(2);
       let allGainsRate = ((allGains * 100) / allNum).toFixed(2);
       return [allGains, allGainsRate];
+    },
+    allAmount() {
+      let total = 0;
+      this.dataList.forEach((val) => {
+        total += parseFloat(val.amount) || 0;
+      });
+      return total.toFixed(2);
     },
     allCostGains() {
       let allCostGains = 0;
@@ -878,7 +891,7 @@ export default {
           }, 5 * 1000);
           this.myVar1 = setInterval(() => {
             this.getData();
-          }, 60 * 1000);
+          }, 15 * 1000);
         } else {
           clearInterval(this.myVar);
           clearInterval(this.myVar1);
@@ -1024,67 +1037,104 @@ export default {
         this.indFundData = res.data.data.diff;
       });
     },
+    isEtf(code) {
+      return /^(15[09]|51[0-9]|56[1-3]|588)/.test(code);
+    },
+    etfSecid(code) {
+      // 15xxxx = 深圳；51xxxx/56xxxx/58xxxx = 上海
+      return (/^15/.test(code) ? "0." : "1.") + code;
+    },
     getData(type) {
-      let fundlist = this.fundListM.map((val) => val.code).join(",");
-      let url =
-        "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo?pageIndex=1&pageSize=200&plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=" +
-        this.userId +
-        "&Fcodes=" +
-        fundlist;
-      this.$axios
-        .get(url)
-        .then((res) => {
-          this.loadingList = false;
-          let data = res.data.Datas;
-          this.dataList = [];
-          let dataList = [];
+      const regular = this.fundListM.filter((f) => !this.isEtf(f.code));
+      const etf = this.fundListM.filter((f) => this.isEtf(f.code));
 
-          data.forEach((val) => {
-            let data = {
-              fundcode: val.FCODE,
-              name: val.SHORTNAME,
-              jzrq: val.PDATE,
-              dwjz: isNaN(val.NAV) ? null : val.NAV,
-              gsz: isNaN(val.GSZ) ? null : val.GSZ,
-              gszzl: isNaN(val.GSZZL) ? 0 : val.GSZZL,
-              gztime: val.GZTIME,
+      const regularRequests = regular.map((f) =>
+        this.$axios
+          .get("https://fundgz.1234567.com.cn/js/" + f.code + ".js")
+          .then((res) => {
+            const match = res.data.match(/\((\{.+\})\)/);
+            if (!match) return null;
+            const d = JSON.parse(match[1]);
+            return {
+              fundcode: d.fundcode,
+              name: d.name,
+              jzrq: d.jzrq,
+              dwjz: isNaN(d.dwjz) ? null : parseFloat(d.dwjz),
+              gsz: isNaN(d.gsz) ? null : parseFloat(d.gsz),
+              gszzl: isNaN(d.gszzl) ? 0 : parseFloat(d.gszzl),
+              gztime: d.gztime,
             };
-            if (val.PDATE != "--" && val.PDATE == val.GZTIME.substr(0, 10)) {
-              data.gsz = val.NAV;
-              data.gszzl = isNaN(val.NAVCHGRT) ? 0 : val.NAVCHGRT;
-              data.hasReplace = true;
-            }
+          })
+          .catch(() => null)
+      );
 
+      const etfRequest =
+        etf.length > 0
+          ? this.$axios
+              .get(
+                "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f4,f12,f13,f14&secids=" +
+                  etf.map((f) => this.etfSecid(f.code)).join(",") +
+                  "&_=" +
+                  new Date().getTime()
+              )
+              .then((res) => {
+                const diff = (res.data.data && res.data.data.diff) || [];
+                return diff.map((item) => {
+                  const price = item.f2;
+                  const changeAmt = item.f4;
+                  const prevClose = price - changeAmt;
+                  return {
+                    fundcode: item.f12,
+                    name: item.f14,
+                    jzrq: new Date().toISOString().substr(0, 10),
+                    dwjz: prevClose,
+                    gsz: price,
+                    gszzl: isNaN(item.f3) ? 0 : parseFloat(item.f3),
+                    gztime: new Date().toTimeString().substr(0, 5),
+                    isEtf: true,
+                  };
+                });
+              })
+              .catch(() => [])
+          : Promise.resolve([]);
+
+      Promise.all([Promise.all(regularRequests), etfRequest]).then(
+        ([regularData, etfData]) => {
+          this.loadingList = false;
+          const dataList = [];
+          const allData = [
+            ...regularData.filter((d) => d !== null),
+            ...etfData,
+          ];
+
+          allData.forEach((val) => {
             let slt = this.fundListM.filter(
-              (item) => item.code == data.fundcode
+              (item) => item.code == val.fundcode
             );
-            data.num = slt[0].num;
-            data.cost = slt[0].cost;
-            data.amount = this.calculateMoney(data);
-            data.gains = this.calculate(data, data.hasReplace);
-            data.costGains = this.calculateCost(data);
-            data.costGainsRate = this.calculateCostRate(data);
+            if (!slt.length) return;
+            val.num = slt[0].num;
+            val.cost = slt[0].cost;
+            val.amount = this.calculateMoney(val);
+            val.gains = this.calculate(val, val.hasReplace);
+            val.costGains = this.calculateCost(val);
+            val.costGainsRate = this.calculateCostRate(val);
 
-            if (data.fundcode == this.RealtimeFundcode) {
-              if (this.showBadge == 1) {
-                if (this.BadgeContent == 1) {
-                  chrome.runtime.sendMessage({
-                    type: "refreshBadge",
-                    data: data,
-                  });
-                }
+            if (val.fundcode == this.RealtimeFundcode) {
+              if (this.showBadge == 1 && this.BadgeContent == 1) {
+                chrome.runtime.sendMessage({
+                  type: "refreshBadge",
+                  data: val,
+                });
               }
             }
-
-            dataList.push(data);
+            dataList.push(val);
           });
-          if (this.showBadge == 1) {
-            if (this.BadgeContent == 2) {
-              chrome.runtime.sendMessage({
-                type: "refreshBadgeAllGains",
-                data: data,
-              });
-            }
+
+          if (this.showBadge == 1 && this.BadgeContent == 2) {
+            chrome.runtime.sendMessage({
+              type: "refreshBadgeAllGains",
+              data: allData,
+            });
           }
 
           this.dataListDft = [...dataList];
@@ -1098,8 +1148,8 @@ export default {
           } else {
             this.dataList = dataList;
           }
-        })
-        .catch((error) => {});
+        }
+      );
     },
     changeNum(item, ind) {
       debounce(() => {
@@ -1534,6 +1584,19 @@ tbody tr:hover {
   text-align: center;
   margin-top: 10px;
 }
+
+.total-row {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  .total-label {
+    margin-right: 6px;
+  }
+  .total-amount {
+    font-weight: bold;
+    color: #333;
+  }
+}
 .gear-input-row {
   display: flex;
   justify-content: center;
@@ -1715,6 +1778,12 @@ tbody tr:hover {
 .container.darkMode {
   color: rgba($color: #ffffff, $alpha: 0.6);
   background-color: #121212;
+  .total-row {
+    color: rgba($color: #ffffff, $alpha: 0.4);
+    .total-amount {
+      color: rgba($color: #ffffff, $alpha: 0.7);
+    }
+  }
   .refresh {
     color: rgba($color: #409eff, $alpha: 0.6);
   }
@@ -1727,15 +1796,15 @@ tbody tr:hover {
     border: 1px solid rgba($color: #409eff, $alpha: 0.6);
     background-color: rgba($color: #409eff, $alpha: 0.6);
   }
-  /deep/ .el-input__inner {
+  ::v-deep .el-input__inner {
     background-color: rgba($color: #ffffff, $alpha: 0.16);
     color: rgba($color: #ffffff, $alpha: 0.6);
   }
-  /deep/ .el-select__input {
+  ::v-deep .el-select__input {
     color: rgba($color: #ffffff, $alpha: 0.6);
   }
 
-  /deep/ tbody tr:hover {
+  ::v-deep tbody tr:hover {
     background-color: rgba($color: #ffffff, $alpha: 0.12);
   }
 
@@ -1773,16 +1842,16 @@ tbody tr:hover {
     color: rgba($color: #ffffff, $alpha: 0.38);
   }
 
-  /deep/ .el-select .el-input.is-focus .el-input__inner {
+  ::v-deep .el-select .el-input.is-focus .el-input__inner {
     border-color: rgba($color: #409eff, $alpha: 0.6);
   }
 
-  /deep/ .el-select .el-tag {
+  ::v-deep .el-select .el-tag {
     background-color: rgba($color: #ffffff, $alpha: 0.14);
     color: rgba($color: #ffffff, $alpha: 0.6);
   }
 
-  /deep/ .el-select-dropdown {
+  ::v-deep .el-select-dropdown {
     background-color: #383838;
     border: 1px solid rgba($color: #ffffff, $alpha: 0.38);
     .popper__arrow::after {
@@ -1808,14 +1877,14 @@ tbody tr:hover {
     }
   }
 
-  /deep/ .el-switch__label.is-active {
+  ::v-deep .el-switch__label.is-active {
     color: rgba($color: #409eff, $alpha: 0.87);
   }
-  /deep/ .el-switch__label {
+  ::v-deep .el-switch__label {
     color: rgba($color: #ffffff, $alpha: 0.6);
   }
 
-  /deep/ .hasReplace-tip {
+  ::v-deep .hasReplace-tip {
     color: rgba($color: #ffffff, $alpha: 0.6);
     border: 1px solid rgba($color: #409eff, $alpha: 0.6);
     background-color: rgba($color: #409eff, $alpha: 0.6);
